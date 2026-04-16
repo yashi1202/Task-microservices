@@ -3,6 +3,9 @@ package com.smarttask.gateway.config;
 import com.smarttask.gateway.filter.JwtAuthFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.reactive
         .CorsWebFilter;
@@ -37,5 +40,21 @@ public class GatewayConfig {
         source.registerCorsConfiguration("/**", config);
 
         return new CorsWebFilter(source);
+    }
+    
+    @Bean
+    public RedisTemplate<String, Object>
+            redisTemplate(
+                    RedisConnectionFactory factory) {
+
+        RedisTemplate<String, Object> template =
+                new RedisTemplate<>();
+        template.setConnectionFactory(factory);
+        template.setKeySerializer(
+                new StringRedisSerializer());
+        template.setValueSerializer(
+                new StringRedisSerializer());
+        template.afterPropertiesSet();
+        return template;
     }
 }

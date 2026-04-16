@@ -5,6 +5,7 @@ import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.MalformedJwtException;
 import io.jsonwebtoken.UnsupportedJwtException;
+import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import io.jsonwebtoken.security.SecurityException;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Component;
 import jakarta.annotation.PostConstruct;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.security.Key;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -33,6 +35,9 @@ public class JwtTokenProvider {
     private long refreshExpirationMs;
 
     private SecretKey signingKey;
+    
+    @Value("${jwt.secret}")
+    private String secretKey;
 
     @PostConstruct
     public void init() {
@@ -164,6 +169,10 @@ public class JwtTokenProvider {
         Date expiry = parseClaims(token).getExpiration();
         return expiry.getTime() - System.currentTimeMillis();
     }
+    
+    public Date extractExpiration(String token) {
+        return extractAllClaims(token).getExpiration();
+    }
 
     // ─── Private helpers ──────────────────────────────────────────────────
 
@@ -173,6 +182,18 @@ public class JwtTokenProvider {
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
+    }
+    
+    private Claims extractAllClaims(String token) {
+        return Jwts.parser()
+                .verifyWith(signingKey)   
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+    }
+    
+    private Key getSigningKey() {
+        return Keys.hmacShaKeyFor(secretKey.getBytes());
     }
 
     /**

@@ -16,7 +16,7 @@ import org.springframework.http.server.reactive
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
-
+import org.springframework.data.redis.core.RedisTemplate;
 import java.util.List;
 
 @Slf4j
@@ -27,6 +27,9 @@ public class JwtAuthFilter extends
 
     @Autowired
     private JwtUtil jwtUtil;
+    
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
 
     // Hardcoded public paths — no @Value injection needed
     private static final List<String> PUBLIC_PATHS =
@@ -82,6 +85,46 @@ public class JwtAuthFilter extends
                     jwtUtil.extractUsername(token);
             String role = jwtUtil.extractRole(token);
 
+            // ─── Session validation ───────────────────
+            // NEW — get sessionId from request header
+            String sessionId = exchange.getRequest()
+                    .getHeaders()
+                    .getFirst("X-Session-Id");
+
+            // NEW — validate session in Redis
+            if (sessionId != null
+                    && !sessionId.isBlank()) {
+
+                Boolean sessionExists =
+                        redisTemplate.hasKey(
+                                "session:" + sessionId);
+
+                if (sessionExists == null
+                        || !sessionExists) {
+                    log.warn("Session expired or "
+                            + "not found for user={} "
+                            + "sessionId={}",
+                            username, sessionId);
+                    return unauthorizedResponse(
+                            exchange,
+                            "Session expired. "
+                            + "Please login again.");
+                }
+
+                // Refresh session TTL — resets
+                // the 30 min inactivity timer
+                redisTemplate.expire(
+                        "session:" + sessionId,
+                        30,
+                        java.util.concurrent
+                                .TimeUnit.MINUTES);
+
+                log.debug("Session valid and "
+                        + "refreshed for user={}",
+                        username);
+            }
+            // ─────────────────────────────────────────
+
             log.debug("JWT valid — user={} role={} "
                     + "path={}", username, role, path);
 
@@ -92,6 +135,11 @@ public class JwtAuthFilter extends
                                     username)
                             .header("X-Auth-Role",
                                     role)
+                            // NEW — forward sessionId
+                            // to downstream services
+                            .header("X-Session-Id",
+                                    sessionId != null
+                                    ? sessionId : "")
                             .build();
 
             ServerWebExchange mutatedExchange =
@@ -102,7 +150,6 @@ public class JwtAuthFilter extends
             return chain.filter(mutatedExchange);
         };
     }
-
     private boolean isPublicPath(String path) {
         return PUBLIC_PATHS.stream()
                 .anyMatch(path::equals);

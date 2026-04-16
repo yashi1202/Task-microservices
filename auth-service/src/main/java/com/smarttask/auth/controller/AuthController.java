@@ -19,38 +19,51 @@ public class AuthController {
     // ─── 1. Login ─────────────────────────────────────────────────────────
 
     @PostMapping("/api/auth/login")
-    public ResponseEntity<ApiResponse<JwtAuthResponse>> login(
-            @Valid @RequestBody LoginRequest request,
-            HttpServletRequest httpRequest) {
+    public ResponseEntity<
+            ApiResponse<JwtAuthResponse>> login(
+                    @Valid @RequestBody
+                            LoginRequest request,
+                    HttpServletRequest
+                            httpRequest) {
 
-        String clientIp  = extractClientIp(httpRequest);
-        String userAgent = httpRequest.getHeader("User-Agent");
+        JwtAuthResponse response =
+                authService.login(
+                        request, httpRequest);
 
-        return ResponseEntity.ok(ApiResponse.success(
-                "Login successful",
-                authService.login(request, clientIp, userAgent)));
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        "Login successful",
+                        response));
     }
-
     // ─── 2. Logout ────────────────────────────────────────────────────────
 
     @PostMapping("/api/auth/logout")
-    public ResponseEntity<ApiResponse<Void>> logout(
-            @RequestHeader("Authorization") String authHeader) {
+    public ResponseEntity<ApiResponse<Void>>
+    logout(
+            @RequestHeader(
+                "Authorization")
+                String authHeader,
+            @RequestHeader(
+                value = "X-Session-Id",
+                required = false)
+                String sessionId) {
 
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("Invalid token format"));
-        }
-        authService.logout(authHeader.substring(7));
-        return ResponseEntity.ok(
-                ApiResponse.success("Logged out successfully", null));
-    }
+String token = authHeader
+        .substring(7);
 
+authService.logout(token, sessionId);
+
+return ResponseEntity.ok(
+        ApiResponse.success(
+                "Logged out successfully",
+                null));
+}
+   
     // ─── 3. Public self-registration ──────────────────────────────────────
     // Anyone can call this — but role is always forced to ROLE_USER
     // so no one can self-register as ADMIN or MANAGER
 
-    @PostMapping("/api/auth/register")
+   /* @PostMapping("/api/auth/register")
     public ResponseEntity<ApiResponse<UserResponse>> selfRegister(
             @Valid @RequestBody RegisterUserRequest request) {
 
@@ -61,7 +74,7 @@ public class AuthController {
                 .body(ApiResponse.success(
                         "Registration successful",
                         authService.register(request)));
-    }
+    }*/
 
     // ─── 4. Admin creates user (any role) ─────────────────────────────────
     // Only ADMIN can call this — allows creating MANAGER or ADMIN accounts
