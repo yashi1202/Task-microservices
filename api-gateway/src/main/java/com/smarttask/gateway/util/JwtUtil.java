@@ -62,6 +62,11 @@ public class JwtUtil {
                 .get("role", String.class);
     }
 
+    public String extractTokenId(String token) {
+        return parseClaims(token)
+                .get("tokenId", String.class);
+    }
+
     // Parse and return claims
     private Claims parseClaims(String token) {
         return Jwts.parser()

@@ -5,6 +5,8 @@ import com.smarttask.auth.dto.LoginRequest;
 import com.smarttask.auth.entity.User;
 import com.smarttask.auth.exception
         .AccountDisabledException;
+import com.smarttask.auth.messaging.LogoutEvent;
+import com.smarttask.auth.messaging.LogoutEventPublisher;
 import com.smarttask.auth.exception
         .UnauthorizedException;
 import com.smarttask.auth.model.SessionData;
@@ -48,6 +50,7 @@ public class AuthServiceImpl
     private final RedisTemplate<String, Object>
             redisTemplate;
     private final UserMapper userMapper;
+    private final LogoutEventPublisher logoutEventPublisher;
 
     // ─── Redis key prefixes ───────────────────────
 
@@ -142,6 +145,13 @@ public class AuthServiceImpl
     public void logout(
             String token,
             String sessionId) {
+        String tokenId = jwtTokenProvider
+                .extractTokenId(token);
+        String username = jwtTokenProvider
+                .extractUsername(token);
+        long tokenExpiresAt = jwtTokenProvider
+                .extractExpiration(token)
+                .getTime();
 
         // Blacklist JWT
         tokenBlacklistService.blacklist(token);
@@ -151,6 +161,17 @@ public class AuthServiceImpl
                 && !sessionId.isBlank()) {
             invalidateSession(sessionId);
         }
+
+        logoutEventPublisher.publish(
+                LogoutEvent.builder()
+                        .tokenId(tokenId)
+                        .sessionId(sessionId)
+                        .username(username)
+                        .tokenExpiresAtEpochMs(
+                                tokenExpiresAt)
+                        .occurredAtEpochMs(
+                                System.currentTimeMillis())
+                        .build());
 
         log.info("User logged out, "
                 + "session={}", sessionId);

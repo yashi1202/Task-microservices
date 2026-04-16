@@ -48,8 +48,16 @@ public class AuthController {
                 required = false)
                 String sessionId) {
 
-String token = authHeader
-        .substring(7);
+if (authHeader == null
+        || !authHeader
+        .startsWith("Bearer ")) {
+    return ResponseEntity
+            .status(HttpStatus.UNAUTHORIZED)
+            .body(ApiResponse.error(
+                    "Missing or invalid Authorization header"));
+}
+
+String token = authHeader.substring(7);
 
 authService.logout(token, sessionId);
 
