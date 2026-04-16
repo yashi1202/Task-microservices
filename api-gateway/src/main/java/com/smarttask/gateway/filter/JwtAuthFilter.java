@@ -1,6 +1,7 @@
 package com.smarttask.gateway.filter;
 
 import com.smarttask.gateway.util.JwtUtil;
+import com.smarttask.gateway.security.RevocationStore;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
@@ -30,6 +31,9 @@ public class JwtAuthFilter extends
     
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
+
+    @Autowired
+    private RevocationStore revocationStore;
 
     // Hardcoded public paths — no @Value injection needed
     private static final List<String> PUBLIC_PATHS =
@@ -84,6 +88,28 @@ public class JwtAuthFilter extends
             String username =
                     jwtUtil.extractUsername(token);
             String role = jwtUtil.extractRole(token);
+            String tokenId = jwtUtil.extractTokenId(token);
+
+            String tokenBlacklistKey =
+                    "blacklist:" + tokenId;
+            Boolean tokenRevokedInRedis =
+                    redisTemplate.hasKey(
+                            tokenBlacklistKey);
+            boolean tokenRevokedInMemory =
+                    revocationStore
+                            .isTokenRevoked(tokenId);
+
+            if (Boolean.TRUE.equals(
+                    tokenRevokedInRedis)
+                    || tokenRevokedInMemory) {
+                log.warn("Rejected revoked token "
+                        + "tokenId={} user={}",
+                        tokenId, username);
+                return unauthorizedResponse(
+                        exchange,
+                        "Token has been revoked. "
+                                + "Please login again.");
+            }
 
             // ─── Session validation ───────────────────
             // NEW — get sessionId from request header
@@ -92,8 +118,26 @@ public class JwtAuthFilter extends
                     .getFirst("X-Session-Id");
 
             // NEW — validate session in Redis
-            if (sessionId != null
-                    && !sessionId.isBlank()) {
+            if (sessionId == null
+                    || sessionId.isBlank()) {
+                return unauthorizedResponse(
+                        exchange,
+                        "Missing session id. "
+                                + "Please login again.");
+            }
+
+            if (revocationStore
+                    .isSessionRevoked(sessionId)) {
+                log.warn("Rejected revoked session "
+                        + "user={} sessionId={}",
+                        username, sessionId);
+                return unauthorizedResponse(
+                        exchange,
+                        "Session expired. "
+                                + "Please login again.");
+            }
+
+            {
 
                 Boolean sessionExists =
                         redisTemplate.hasKey(
